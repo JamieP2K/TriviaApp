@@ -37,6 +37,7 @@
   </div>
 
   <button class="start-btn" id="start-btn" onclick="startQuiz()">Start Quiz</button>
+  <button class="mp-entry-btn" onclick="showMpMenu()">Multiplayer</button>
   <p class="error" id="setup-err" style="display:none"></p>
 </div>
 
@@ -73,6 +74,121 @@
   <button class="home-btn" onclick="reset()">⌂ Home</button>
 </div>
 
+<!-- MP MENU -->
+<div id="mp-menu" class="screen">
+  <h1 class="game-title">Trivia<span>Blaze</span></h1>
+  <p class="game-sub">Multiplayer</p>
+  <div class="mp-menu-btns">
+    <button class="mp-big-btn" onclick="mpGoName('host')">Host</button>
+    <button class="mp-big-btn mp-big-btn--secondary" onclick="mpGoName('join')">Join</button>
+    <button class="mp-back-btn" onclick="show('start-screen')">Back</button>
+  </div>
+</div>
+
+<!-- MP NAME -->
+<div id="mp-name" class="screen">
+  <h1 class="game-title">Trivia<span>Blaze</span></h1>
+  <p class="game-sub">Enter your display name</p>
+  <div class="mp-name-form">
+    <input class="mp-text-input" id="mp-name-input" type="text" maxlength="20" placeholder="Your name…" />
+    <p class="error" id="mp-name-err" style="display:none"></p>
+    <button class="start-btn" id="mp-name-btn" onclick="mpConfirmName()">Continue</button>
+    <button class="mp-back-btn" onclick="show('mp-menu')">Back</button>
+  </div>
+</div>
+
+<!-- MP HOST -->
+<div id="mp-host" class="screen">
+  <div class="mp-host-header">
+    <div>
+      <p class="game-sub" style="margin:0 0 4px">Room Code</p>
+      <div class="mp-room-code" id="host-room-code">——</div>
+    </div>
+    <button class="mp-leave-btn" onclick="mpLeave()">Leave</button>
+  </div>
+
+  <div class="settings-grid" style="margin-top:20px">
+    <div class="setting-card" style="grid-column:1/-1" onclick="openSheet('category')">
+      <div class="setting-label">Category</div>
+      <div class="setting-value" id="cat-display-mp">Any</div>
+      <div class="setting-arrow">›</div>
+    </div>
+    <div class="setting-card" onclick="openSheet('difficulty')">
+      <div class="setting-label">Difficulty</div>
+      <div class="setting-value" id="diff-display-mp">Any</div>
+      <div class="setting-arrow">›</div>
+    </div>
+    <div class="setting-card" onclick="openSheet('questions')">
+      <div class="setting-label">Questions</div>
+      <div class="setting-value" id="num-display-mp">10</div>
+      <div class="setting-arrow">›</div>
+    </div>
+    <div class="setting-card" style="grid-column:1/-1" onclick="openSheet('timerDur')">
+      <div class="setting-label">Time Limit</div>
+      <div class="setting-value" id="timerDur-display-mp">Off</div>
+      <div class="setting-arrow">›</div>
+    </div>
+  </div>
+
+  <div class="mp-player-list" id="host-player-list"></div>
+  <p class="mp-waiting-hint">Waiting for players to join…</p>
+  <button class="start-btn" id="mp-start-btn" onclick="mpStartGame()">Start Game</button>
+  <p class="error" id="mp-host-err" style="display:none"></p>
+</div>
+
+<!-- MP JOIN -->
+<div id="mp-join" class="screen">
+  <h1 class="game-title">Trivia<span>Blaze</span></h1>
+  <p class="game-sub">Enter Room Code</p>
+  <div class="mp-name-form">
+    <input class="mp-text-input mp-code-input" id="mp-join-code" type="text" maxlength="6" placeholder="XXXXXX" />
+    <p class="error" id="mp-join-err" style="display:none"></p>
+    <button class="start-btn" id="mp-join-btn" onclick="mpJoinRoom()">Join</button>
+    <button class="mp-back-btn" onclick="show('mp-name')">Back</button>
+  </div>
+</div>
+
+<!-- MP LOBBY (non-host waiting room) -->
+<div id="mp-lobby" class="screen">
+  <h1 class="game-title">Trivia<span>Blaze</span></h1>
+  <div class="mp-room-code" id="lobby-room-code">——</div>
+  <p class="game-sub">Waiting for host to start…</p>
+  <div class="mp-player-list" id="lobby-player-list"></div>
+  <button class="mp-back-btn" onclick="mpLeave()">Leave</button>
+</div>
+
+<!-- MP QUIZ -->
+<div id="mp-quiz" class="screen">
+  <div class="quiz-header">
+    <span class="quiz-q-num" id="mp-q-num"></span>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="timer-pill" id="mp-timer-wrap">
+        <span class="timer-icon">⏱</span>
+        <div class="timer-ring">
+          <svg viewBox="0 0 28 28"><circle class="timer-ring-bg" cx="14" cy="14" r="12"/><circle class="timer-ring-fill" id="mp-timer-fill" cx="14" cy="14" r="12"/></svg>
+          <div class="timer-num" id="mp-timer-label"></div>
+        </div>
+      </div>
+      <div class="quiz-score">Score: <span id="mp-q-score">0</span></div>
+    </div>
+  </div>
+  <div class="progress-track"><div class="progress-fill" id="mp-prog"></div></div>
+  <p class="q-category" id="mp-q-cat"></p>
+  <p class="q-text" id="mp-q-text"></p>
+  <div class="options" id="mp-options"></div>
+  <div class="mp-waiting-others" id="mp-waiting-others" style="display:none">
+    <span class="mp-waiting-dot"></span> Waiting for others…
+  </div>
+</div>
+
+<!-- MP LEADERBOARD -->
+<div id="mp-leaderboard" class="screen">
+  <h1 class="game-title" style="margin-bottom:6px">Trivia<span>Blaze</span></h1>
+  <p class="game-sub">Final Results</p>
+  <div class="mp-lb-list" id="mp-lb-list"></div>
+  <button class="home-btn" style="margin-top:16px" onclick="mpLeave()">⌂ Home</button>
+</div>
+
 <!-- SHEET -->
 <div class="dropdown-overlay" id="overlay" style="display:none" onclick="closeSheet()">
   <div class="dropdown-sheet" onclick="event.stopPropagation()">
@@ -86,6 +202,22 @@
   </div>
 </div>
 
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+  // PASTE YOUR FIREBASE CONFIG HERE
+  const firebaseConfig = {
+    apiKey: "AIzaSyAmcb3YsFdjG3uFnqnRLFCwOAwmeH8vrUY",
+    authDomain: "triviablaze-7d500.firebaseapp.com",
+    projectId: "triviablaze-7d500",
+    storageBucket: "triviablaze-7d500.firebasestorage.app",
+    messagingSenderId: "154101060946",
+    appId: "1:154101060946:web:01fbeda26f51a8d044968b",
+    databaseURL: "https://triviablaze-7d500-default-rtdb.europe-west1.firebasedatabase.app/"
+  };
+  firebase.initializeApp(firebaseConfig);
+</script>
 <script src="script.js"></script>
 </body>
 </html>

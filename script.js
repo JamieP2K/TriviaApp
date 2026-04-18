@@ -19,25 +19,25 @@ const SHEETS = {
     title: 'Category',
     options: () => [{ val:'any', label:'Any Category' }, ...categories.map(c => ({ val: String(c.id), label: c.name }))],
     current: () => cfg.cat,
-    select: v => { cfg.cat = v; document.getElementById('cat-display').textContent = v === 'any' ? 'Any' : (categories.find(c => String(c.id) === v)||{name:'Any'}).name; }
+    select: v => { cfg.cat = v; const label = v === 'any' ? 'Any' : (categories.find(c => String(c.id) === v)||{name:'Any'}).name; document.getElementById('cat-display').textContent = label; const mpEl = document.getElementById('cat-display-mp'); if (mpEl) mpEl.textContent = label; }
   },
   difficulty: {
     title: 'Difficulty',
     options: () => [{val:'any',label:'Any'},{val:'easy',label:'Easy'},{val:'medium',label:'Medium'},{val:'hard',label:'Hard'}],
     current: () => cfg.diff,
-    select: v => { cfg.diff = v; document.getElementById('diff-display').textContent = v === 'any' ? 'Any' : v[0].toUpperCase()+v.slice(1); }
+    select: v => { cfg.diff = v; const label = v === 'any' ? 'Any' : v[0].toUpperCase()+v.slice(1); document.getElementById('diff-display').textContent = label; const mpEl = document.getElementById('diff-display-mp'); if (mpEl) mpEl.textContent = label; }
   },
   questions: {
     title: 'Number of Questions',
     options: () => [5,10,15,20].map(n => ({ val: n, label: `${n} Questions` })),
     current: () => cfg.num,
-    select: v => { cfg.num = v; document.getElementById('num-display').textContent = v; }
+    select: v => { cfg.num = v; document.getElementById('num-display').textContent = v; const mpEl = document.getElementById('num-display-mp'); if (mpEl) mpEl.textContent = v; }
   },
   timerDur: {
     title: 'Time Limit',
     options: () => [{val:0,label:'Off'},{val:15,label:'15 seconds'},{val:30,label:'30 seconds'},{val:60,label:'60 seconds'}],
     current: () => cfg.timerDur,
-    select: v => { cfg.timerDur = v; cfg.timerOn = v > 0; document.getElementById('timerDur-display').textContent = v === 0 ? 'Off' : `${v} seconds`; }
+    select: v => { cfg.timerDur = v; cfg.timerOn = v > 0; const label = v === 0 ? 'Off' : `${v} seconds`; document.getElementById('timerDur-display').textContent = label; const mpEl = document.getElementById('timerDur-display-mp'); if (mpEl) mpEl.textContent = label; }
   }
 };
 
@@ -189,4 +189,480 @@ function reset() {
   show('start-screen');
   const btn = document.getElementById('start-btn');
   btn.disabled = false; btn.textContent = 'Start Quiz';
+}
+
+/* =========================================================
+   MULTIPLAYER
+   ========================================================= */
+
+const db = () => firebase.database();
+
+const mp = {
+  roomCode: null,
+  playerId: null,
+  playerName: null,
+  isHost: false,
+  nameDestination: null,
+  questions: [],
+  currentQ: 0,
+  mpScore: 0,
+  mpRafId: null,
+  answered: false,
+  listeners: [],
+  revealTimeout: null,
+};
+
+function mpUUID() {
+  return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+}
+
+function mpGenerateCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+function mpInitials(name) {
+  return name.trim().slice(0, 2).toUpperCase();
+}
+
+// ---- Navigation ----
+
+function showMpMenu() { show('mp-menu'); }
+
+function mpGoName(destination) {
+  mp.nameDestination = destination;
+  document.getElementById('mp-name-input').value = '';
+  document.getElementById('mp-name-err').style.display = 'none';
+  show('mp-name');
+  setTimeout(() => document.getElementById('mp-name-input').focus(), 100);
+}
+
+function mpConfirmName() {
+  const val = document.getElementById('mp-name-input').value.trim();
+  const err = document.getElementById('mp-name-err');
+  if (!val) { err.textContent = 'Please enter a name.'; err.style.display = 'block'; return; }
+  err.style.display = 'none';
+  mp.playerName = val;
+  mp.playerId = mpUUID();
+  if (mp.nameDestination === 'host') {
+    mpCreateRoom();
+  } else {
+    document.getElementById('mp-join-code').value = '';
+    document.getElementById('mp-join-err').style.display = 'none';
+    show('mp-join');
+    setTimeout(() => document.getElementById('mp-join-code').focus(), 100);
+  }
+}
+
+// ---- Host ----
+
+async function mpCreateRoom() {
+  const btn = document.getElementById('mp-name-btn');
+  const err = document.getElementById('mp-name-err');
+  err.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Creating…';
+
+  const fbGet = (ref) => Promise.race([
+    ref.get(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase timed out. Check your databaseURL in the firebaseConfig inside index.html — it must match exactly what the Firebase console shows (e.g. https://YOUR_PROJECT-default-rtdb.firebaseio.com or https://YOUR_PROJECT-default-rtdb.REGION.firebasedatabase.app).')), 8000))
+  ]);
+
+  try {
+    let code;
+    for (let attempts = 0; attempts < 10; attempts++) {
+      code = mpGenerateCode();
+      const snap = await fbGet(db().ref(`rooms/${code}`));
+      if (!snap.exists()) break;
+      code = null;
+    }
+    if (!code) throw new Error('Could not generate a unique room code. Please try again.');
+
+    mp.roomCode = code;
+    mp.isHost = true;
+
+    const playerEntry = { name: mp.playerName, score: 0, connected: true, answers: {} };
+    await db().ref(`rooms/${code}`).set({
+      status: 'lobby',
+      hostId: mp.playerId,
+      settings: { cat: cfg.cat, diff: cfg.diff, num: cfg.num, timerOn: cfg.timerOn, timerDur: cfg.timerDur },
+      players: { [mp.playerId]: playerEntry }
+    });
+
+    db().ref(`rooms/${code}/players/${mp.playerId}/connected`).onDisconnect().set(false);
+
+    document.getElementById('host-room-code').textContent = code;
+    btn.disabled = false; btn.textContent = 'Continue';
+    show('mp-host');
+    mpListenPlayers();
+    mpListenStatus();
+  } catch(e) {
+    err.textContent = e.message || 'Failed to connect to Firebase. Check your config and that Realtime Database is enabled.';
+    err.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Continue';
+    mp.roomCode = null; mp.isHost = false;
+  }
+}
+
+function mpListenPlayers() {
+  const ref = db().ref(`rooms/${mp.roomCode}/players`);
+  const handle = ref.on('value', snap => {
+    const players = snap.val() || {};
+    // Host: silently remove disconnected players
+    if (mp.isHost) {
+      Object.entries(players).forEach(([id, p]) => {
+        if (!p.connected && id !== mp.playerId) {
+          db().ref(`rooms/${mp.roomCode}/players/${id}`).remove();
+        }
+      });
+    }
+    // Update host lobby list
+    const hostList = document.getElementById('host-player-list');
+    if (hostList) mpRenderPlayerList(hostList, players);
+    // Update lobby list (for joined players)
+    const lobbyList = document.getElementById('lobby-player-list');
+    if (lobbyList) mpRenderPlayerList(lobbyList, players);
+    // During quiz: update answer reveal tags
+    if (document.getElementById('mp-quiz').classList.contains('active')) {
+      mpUpdateAnswerTags(players);
+      if (mp.isHost) mpCheckAllAnswered(players);
+    }
+  });
+  mp.listeners.push({ ref, handle, event: 'value' });
+}
+
+function mpRenderPlayerList(container, players) {
+  container.innerHTML = '';
+  Object.entries(players).filter(([,p]) => p.connected !== false).forEach(([id, p]) => {
+    const div = document.createElement('div');
+    div.className = 'mp-player-item';
+    div.innerHTML = `<div class="mp-player-avatar">${mpInitials(p.name)}</div>
+      <span class="mp-player-name">${p.name}</span>
+      ${id === mp.playerId ? '<span class="mp-player-badge">You</span>' : ''}`;
+    container.appendChild(div);
+  });
+}
+
+function mpListenStatus() {
+  let quizStarted = false;
+  let leaderboardShown = false;
+  const ref = db().ref(`rooms/${mp.roomCode}/status`);
+  const handle = ref.on('value', snap => {
+    const status = snap.val();
+    if (status === 'playing' && !quizStarted) { quizStarted = true; mpStartClientQuiz(); }
+    if (status === 'results' && !leaderboardShown) { leaderboardShown = true; mpShowLeaderboard(); }
+  });
+  mp.listeners.push({ ref, handle, event: 'value' });
+}
+
+async function mpStartGame() {
+  const btn = document.getElementById('mp-start-btn');
+  const err = document.getElementById('mp-host-err');
+  err.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Loading…';
+
+  const s = cfg;
+  let url = `https://opentdb.com/api.php?amount=${s.num}&type=multiple`;
+  if (s.cat !== 'any') url += `&category=${s.cat}`;
+  if (s.diff !== 'any') url += `&difficulty=${s.diff}`;
+
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (!data.results || data.results.length === 0) throw new Error('No questions returned. Try different settings.');
+    const qs = data.results.map(q => ({
+      q: decode(q.question),
+      correct: decode(q.correct_answer),
+      options: shuffle([decode(q.correct_answer), ...q.incorrect_answers.map(decode)]),
+      category: decode(q.category)
+    }));
+
+    await db().ref(`rooms/${mp.roomCode}`).update({
+      questions: qs,
+      currentQuestion: 0,
+      revealing: false,
+      settings: { cat: s.cat, diff: s.diff, num: s.num, timerOn: s.timerOn, timerDur: s.timerDur },
+      status: 'playing'
+    });
+  } catch(e) {
+    err.textContent = e.message || 'Failed to load questions.';
+    err.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Start Game';
+  }
+}
+
+// ---- Join ----
+
+async function mpJoinRoom() {
+  const code = document.getElementById('mp-join-code').value.trim().toUpperCase();
+  const err = document.getElementById('mp-join-err');
+  const btn = document.getElementById('mp-join-btn');
+  err.style.display = 'none';
+
+  if (code.length !== 6) { err.textContent = 'Enter a 6-character room code.'; err.style.display = 'block'; return; }
+
+  btn.disabled = true; btn.textContent = 'Joining…';
+
+  try {
+    const snap = await db().ref(`rooms/${code}`).get();
+    if (!snap.exists()) throw new Error('Room not found. Check the code and try again.');
+    const room = snap.val();
+    if (room.status !== 'lobby') throw new Error('This game has already started or ended.');
+    const playerCount = Object.values(room.players || {}).filter(p => p.connected !== false).length;
+    if (playerCount >= 6) throw new Error('This room is full (6 players max).');
+
+    mp.roomCode = code;
+    mp.isHost = false;
+
+    await db().ref(`rooms/${code}/players/${mp.playerId}`).set({
+      name: mp.playerName, score: 0, connected: true, answers: {}
+    });
+
+    db().ref(`rooms/${code}/players/${mp.playerId}/connected`).onDisconnect().set(false);
+
+    document.getElementById('lobby-room-code').textContent = code;
+    btn.disabled = false; btn.textContent = 'Join';
+    show('mp-lobby');
+    mpListenPlayers();
+    mpListenStatus();
+  } catch(e) {
+    err.textContent = e.message || 'Failed to join. Please try again.';
+    err.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Join';
+  }
+}
+
+// ---- Quiz (shared) ----
+
+function mpStartClientQuiz() {
+  mp.mpScore = 0;
+  mp.questions = [];
+  mp.currentQ = 0;
+
+  // Read full room snapshot to get questions and settings, then listen to currentQuestion
+  db().ref(`rooms/${mp.roomCode}`).get().then(snap => {
+    const room = snap.val();
+    mp.questions = room.questions || [];
+    // Apply host settings locally for timer
+    const s = room.settings || {};
+    cfg.timerOn = s.timerOn || false;
+    cfg.timerDur = s.timerDur || 0;
+
+    show('mp-quiz');
+    mpRenderMpQuestion(room.currentQuestion || 0);
+    mpListenCurrentQuestion();
+  });
+}
+
+function mpListenCurrentQuestion() {
+  const ref = db().ref(`rooms/${mp.roomCode}/currentQuestion`);
+  const handle = ref.on('value', snap => {
+    const idx = snap.val();
+    if (idx === null) return;
+    if (idx !== mp.currentQ) {
+      mp.currentQ = idx;
+      mpRenderMpQuestion(idx);
+    }
+  });
+  mp.listeners.push({ ref, handle, event: 'value' });
+}
+
+function mpRenderMpQuestion(idx) {
+  const q = mp.questions[idx];
+  if (!q) return;
+  mp.answered = false;
+  mp.currentQ = idx;
+
+  const total = mp.questions.length;
+  document.getElementById('mp-prog').style.width = `${(idx / total) * 100}%`;
+  document.getElementById('mp-q-num').textContent = `Question ${idx + 1} of ${total}`;
+  document.getElementById('mp-q-score').textContent = mp.mpScore;
+  document.getElementById('mp-q-cat').textContent = q.category;
+  document.getElementById('mp-q-text').innerHTML = q.q;
+  document.getElementById('mp-waiting-others').style.display = 'none';
+
+  const opts = document.getElementById('mp-options');
+  opts.innerHTML = '';
+  q.options.forEach(opt => {
+    const b = document.createElement('button');
+    b.className = 'opt-btn';
+    b.innerHTML = opt;
+    b.dataset.answer = opt;
+    b.onclick = () => mpSelectAnswer(b, opt, q.correct, idx);
+    opts.appendChild(b);
+  });
+
+  mpStopTimer();
+  if (cfg.timerOn) mpStartTimer(idx);
+}
+
+function mpSelectAnswer(btn, chosen, correct, qIdx) {
+  if (mp.answered) return;
+  mp.answered = true;
+  mpStopTimer();
+
+  const isCorrect = chosen === correct;
+  if (isCorrect) mp.mpScore++;
+  document.getElementById('mp-q-score').textContent = mp.mpScore;
+
+  // Disable all options and show local reveal
+  document.querySelectorAll('#mp-options .opt-btn').forEach(b => {
+    b.disabled = true;
+    if (b.dataset.answer === correct) b.classList.add(b === btn && isCorrect ? 'correct' : 'reveal-correct');
+    if (b === btn && !isCorrect) b.classList.add('wrong');
+  });
+  if (isCorrect) { btn.classList.remove('reveal-correct'); btn.classList.add('correct'); }
+
+  // Write answer to Firebase
+  db().ref(`rooms/${mp.roomCode}/players/${mp.playerId}/score`).set(mp.mpScore);
+  db().ref(`rooms/${mp.roomCode}/players/${mp.playerId}/answers/${qIdx}`).set(chosen);
+
+  document.getElementById('mp-waiting-others').style.display = 'flex';
+}
+
+function mpHandleTimeout(qIdx) {
+  if (mp.answered) return;
+  mp.answered = true;
+
+  document.querySelectorAll('#mp-options .opt-btn').forEach(b => {
+    b.disabled = true;
+    const q = mp.questions[qIdx];
+    b.classList.add(b.dataset.answer === q.correct ? 'reveal-correct' : 'timed-out');
+  });
+
+  db().ref(`rooms/${mp.roomCode}/players/${mp.playerId}/answers/${qIdx}`).set('__TIMEOUT__');
+  document.getElementById('mp-waiting-others').style.display = 'flex';
+}
+
+function mpCheckAllAnswered(players) {
+  if (!mp.isHost) return;
+  const connected = Object.entries(players).filter(([,p]) => p.connected !== false);
+  if (connected.length === 0) return;
+  const allAnswered = connected.every(([id, p]) => p.answers && p.answers[mp.currentQ] !== undefined);
+  if (!allAnswered) return;
+
+  // Debounce: only fire once per question
+  if (mp.revealTimeout) return;
+  mp.revealTimeout = setTimeout(() => {
+    mp.revealTimeout = null;
+    const nextIdx = mp.currentQ + 1;
+    if (nextIdx >= mp.questions.length) {
+      db().ref(`rooms/${mp.roomCode}/status`).set('results');
+    } else {
+      db().ref(`rooms/${mp.roomCode}/currentQuestion`).set(nextIdx);
+    }
+  }, 3000);
+}
+
+function mpUpdateAnswerTags(players) {
+  const qIdx = mp.currentQ;
+  const connected = Object.entries(players).filter(([id, p]) => p.connected !== false && id !== mp.playerId);
+  const allAnswered = Object.entries(players).filter(([,p]) => p.connected !== false)
+    .every(([id, p]) => p.answers && p.answers[qIdx] !== undefined);
+
+  if (!allAnswered) return;
+
+  const opts = document.querySelectorAll('#mp-options .opt-btn');
+  opts.forEach(b => {
+    let tags = b.querySelector('.player-tags');
+    if (!tags) { tags = document.createElement('div'); tags.className = 'player-tags'; b.appendChild(tags); }
+    tags.innerHTML = '';
+    connected.forEach(([id, p]) => {
+      if (p.answers && p.answers[qIdx] === b.dataset.answer) {
+        const tag = document.createElement('span');
+        tag.className = 'player-tag';
+        tag.textContent = p.name;
+        tags.appendChild(tag);
+      }
+    });
+  });
+  document.getElementById('mp-waiting-others').style.display = 'none';
+}
+
+// ---- MP Timer ----
+
+function mpStartTimer(qIdx) {
+  mpStopTimer();
+  const wrap = document.getElementById('mp-timer-wrap');
+  const fill = document.getElementById('mp-timer-fill');
+  const label = document.getElementById('mp-timer-label');
+  wrap.classList.add('visible');
+  const circumference = 75.4;
+  const duration = cfg.timerDur * 1000, start = performance.now();
+  function frame(now) {
+    const pct = Math.max(0, 1 - (now - start) / duration);
+    fill.style.strokeDashoffset = circumference * (1 - pct);
+    fill.style.stroke = pct > 0.5 ? 'var(--green)' : pct > 0.25 ? '#f0a500' : 'var(--red)';
+    label.textContent = Math.ceil(pct * cfg.timerDur);
+    if (pct <= 0) { mpStopTimer(); mpHandleTimeout(qIdx); return; }
+    mp.mpRafId = requestAnimationFrame(frame);
+  }
+  mp.mpRafId = requestAnimationFrame(frame);
+}
+
+function mpStopTimer() {
+  if (mp.mpRafId) { cancelAnimationFrame(mp.mpRafId); mp.mpRafId = null; }
+  const wrap = document.getElementById('mp-timer-wrap');
+  if (wrap) wrap.classList.remove('visible');
+}
+
+// ---- Leaderboard ----
+
+function mpShowLeaderboard() {
+  mpStopTimer();
+  db().ref(`rooms/${mp.roomCode}/players`).get().then(snap => {
+    const players = snap.val() || {};
+    const entries = Object.entries(players)
+      .filter(([,p]) => p.connected !== false || true) // include all who played
+      .map(([id, p]) => ({ id, name: p.name, score: p.score || 0 }))
+      .sort((a, b) => b.score - a.score);
+
+    // Dense ranking: if tied, same rank; next rank is consecutive
+    let rank = 1;
+    entries.forEach((e, i) => {
+      if (i > 0 && entries[i].score < entries[i - 1].score) rank = i + 1;
+      e.rank = rank;
+    });
+
+    const list = document.getElementById('mp-lb-list');
+    list.innerHTML = '';
+    entries.forEach(e => {
+      const div = document.createElement('div');
+      let rankClass = '';
+      if (e.rank === 1) rankClass = 'mp-lb-entry--1st';
+      else if (e.rank === 2) rankClass = 'mp-lb-entry--2nd';
+      else if (e.rank === 3) rankClass = 'mp-lb-entry--3rd';
+      const medal = e.rank === 1 ? '🥇' : e.rank === 2 ? '🥈' : e.rank === 3 ? '🥉' : `#${e.rank}`;
+      const isMe = e.id === mp.playerId;
+      div.className = `mp-lb-entry ${rankClass}`;
+      div.innerHTML = `<div class="mp-lb-rank">${medal}</div>
+        <div class="mp-lb-name">${e.name}${isMe ? '<span class="mp-lb-me">You</span>' : ''}</div>
+        <div class="mp-lb-score">${e.score}</div>`;
+      list.appendChild(div);
+    });
+
+    show('mp-leaderboard');
+    // Mark room closed so no one can join late
+    if (mp.isHost) db().ref(`rooms/${mp.roomCode}/status`).set('closed');
+  });
+}
+
+// ---- Cleanup ----
+
+function mpLeave() {
+  mpStopTimer();
+  if (mp.revealTimeout) { clearTimeout(mp.revealTimeout); mp.revealTimeout = null; }
+  mp.listeners.forEach(({ ref, handle, event }) => ref.off(event, handle));
+  mp.listeners = [];
+  if (mp.roomCode && mp.playerId) {
+    db().ref(`rooms/${mp.roomCode}/players/${mp.playerId}/connected`).set(false);
+  }
+  // Reset mp state
+  Object.assign(mp, {
+    roomCode: null, playerId: null, playerName: null, isHost: false,
+    nameDestination: null, questions: [], currentQ: 0, mpScore: 0,
+    mpRafId: null, answered: false, listeners: [], revealTimeout: null
+  });
+  show('start-screen');
 }

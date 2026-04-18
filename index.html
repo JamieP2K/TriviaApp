@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trivia Quiz</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- START -->
+<div id="start-screen" class="screen active">
+  <div class="logo-wrap">
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="32" cy="32" r="28" stroke="#f0f0f0" stroke-width="3"/>
+      <text x="32" y="42" font-size="32" text-anchor="middle" fill="#f0f0f0" font-family="system-ui" font-weight="800">?</text>
+    </svg>
+  </div>
+  <h1 class="game-title">TRIVIA<span>BLITZ</span></h1>
+  <p class="game-sub">How much do you really know?</p>
+
+  <div class="settings-grid">
+    <div class="setting-card" style="grid-column:1/-1" onclick="openSheet('category')">
+      <div class="setting-label">Category</div>
+      <div class="setting-value" id="cat-display">Any</div>
+      <div class="setting-arrow">›</div>
+    </div>
+    <div class="setting-card" onclick="openSheet('difficulty')">
+      <div class="setting-label">Difficulty</div>
+      <div class="setting-value" id="diff-display">Any</div>
+      <div class="setting-arrow">›</div>
+    </div>
+    <div class="setting-card" onclick="openSheet('questions')">
+      <div class="setting-label">Questions</div>
+      <div class="setting-value" id="num-display">10</div>
+      <div class="setting-arrow">›</div>
+    </div>
+    <div class="setting-card" style="grid-column:1/-1" onclick="openSheet('timerDur')">
+      <div class="setting-label">Time Limit</div>
+      <div class="setting-value" id="timerDur-display">Off</div>
+      <div class="setting-arrow">›</div>
+    </div>
+  </div>
+
+  <button class="start-btn" id="start-btn" onclick="startQuiz()">Start Quiz</button>
+  <p class="error" id="setup-err" style="display:none"></p>
+</div>
+
+<!-- QUIZ -->
+<div id="quiz-screen" class="screen">
+  <div class="quiz-header">
+    <span class="quiz-q-num" id="q-num"></span>
+    <div class="quiz-score">Score: <span id="q-score">0</span></div>
+  </div>
+  <div class="timer-wrap" id="timer-wrap">
+    <div class="timer-track"><div class="timer-fill" id="timer-fill"></div></div>
+    <div class="timer-label" id="timer-label"></div>
+  </div>
+  <div class="progress-track"><div class="progress-fill" id="prog"></div></div>
+  <p class="q-category" id="q-cat"></p>
+  <p class="q-text" id="q-text"></p>
+  <div class="options" id="options"></div>
+  <button class="next-btn" id="next-btn" onclick="nextQuestion()">Next Question →</button>
+</div>
+
+<!-- RESULTS -->
+<div id="results-screen" class="screen">
+  <div class="results-hero">
+    <div><span class="big-score" id="final-score"></span><span class="score-denom" id="score-denom"></span></div>
+    <div class="score-pct" id="score-pct"></div>
+    <div class="verdict" id="verdict"></div>
+  </div>
+  <div class="review-list" id="review-list"></div>
+  <button class="home-btn" onclick="reset()">⌂ Home</button>
+</div>
+
+<!-- SHEET -->
+<div class="dropdown-overlay" id="overlay" style="display:none" onclick="closeSheet()">
+  <div class="dropdown-sheet" onclick="event.stopPropagation()">
+    <div class="sheet-header">
+      <div class="sheet-title" id="sheet-title"></div>
+      <button class="sheet-done" onclick="closeSheet()">Done</button>
+    </div>
+    <div class="sheet-options-scroll">
+      <div id="sheet-options"></div>
+    </div>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>

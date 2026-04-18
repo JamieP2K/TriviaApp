@@ -85,17 +85,19 @@ async function startQuiz() {
   }
 }
 
-// Timer
 function startTimer() {
   stopTimer();
-  const wrap = document.getElementById('timer-wrap'), fill = document.getElementById('timer-fill'), label = document.getElementById('timer-label');
+  const wrap = document.getElementById('timer-wrap');
+  const fill = document.getElementById('timer-fill');
+  const label = document.getElementById('timer-label');
   wrap.classList.add('visible');
+  const circumference = 75.4;
   const duration = cfg.timerDur * 1000, start = performance.now();
   function frame(now) {
     const pct = Math.max(0, 1 - (now - start) / duration);
-    fill.style.width = (pct * 100) + '%';
-    fill.style.background = pct > 0.5 ? 'var(--green)' : pct > 0.25 ? '#f0a500' : 'var(--red)';
-    label.textContent = Math.ceil(pct * cfg.timerDur) + 's';
+    fill.style.strokeDashoffset = circumference * (1 - pct);
+    fill.style.stroke = pct > 0.5 ? 'var(--green)' : pct > 0.25 ? '#f0a500' : 'var(--red)';
+    label.textContent = Math.ceil(pct * cfg.timerDur);
     if (pct <= 0) { stopTimer(); timeOut(); return; }
     rafId = requestAnimationFrame(frame);
   }

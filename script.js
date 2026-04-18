@@ -169,7 +169,7 @@ function showResults() {
   document.getElementById('final-score').textContent = score;
   document.getElementById('score-denom').textContent = `/${total}`;
   document.getElementById('score-pct').textContent = `${pct}% correct`;
-  const verdicts = [[90,'🏆 Outstanding!'],[70,'🎉 Great job!'],[50,'👍 Not bad!'],[0,'😅 Better luck next time!']];
+  const verdicts = [[90,'Outstanding'],[70,'Great job'],[50,'Not bad'],[0,'Better luck next time']];
   document.getElementById('verdict').textContent = verdicts.find(([t]) => pct >= t)[1];
   const list = document.getElementById('review-list');
   list.innerHTML = '';

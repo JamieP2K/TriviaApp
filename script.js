@@ -294,6 +294,9 @@ async function mpCreateRoom() {
 
     document.getElementById('host-room-code').textContent = code;
     btn.disabled = false; btn.textContent = 'Continue';
+    const startBtn = document.getElementById('mp-start-btn');
+    startBtn.disabled = false; startBtn.textContent = 'Start Game';
+    document.getElementById('mp-host-err').style.display = 'none';
     show('mp-host');
     mpListenPlayers();
     mpListenStatus();

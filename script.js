@@ -202,6 +202,7 @@ const mp = {
   playerId: null,
   playerName: null,
   isHost: false,
+  hostId: null,
   nameDestination: null,
   questions: [],
   currentQ: 0,
@@ -359,6 +360,20 @@ function mpListenStatus() {
   mp.listeners.push({ ref, handle, event: 'value' });
 }
 
+function mpListenHostConnection() {
+  const ref = db().ref(`rooms/${mp.roomCode}/players/${mp.hostId}/connected`);
+  const handle = ref.on('value', snap => {
+    if (snap.val() === false) {
+      const onLobby = document.getElementById('mp-lobby').classList.contains('active');
+      const onQuiz = document.getElementById('mp-quiz').classList.contains('active');
+      if (onLobby || onQuiz) {
+        document.getElementById('mp-disconnected').classList.add('visible');
+      }
+    }
+  });
+  mp.listeners.push({ ref, handle, event: 'value' });
+}
+
 async function mpStartGame() {
   const btn = document.getElementById('mp-start-btn');
   const err = document.getElementById('mp-host-err');
@@ -417,6 +432,7 @@ async function mpJoinRoom() {
 
     mp.roomCode = code;
     mp.isHost = false;
+    mp.hostId = room.hostId;
 
     await db().ref(`rooms/${code}/players/${mp.playerId}`).set({
       name: mp.playerName, score: 0, connected: true, answers: {}
@@ -429,6 +445,7 @@ async function mpJoinRoom() {
     show('mp-lobby');
     mpListenPlayers();
     mpListenStatus();
+    mpListenHostConnection();
   } catch(e) {
     err.textContent = e.message || 'Failed to join. Please try again.';
     err.style.display = 'block';
@@ -661,10 +678,11 @@ function mpLeave() {
   if (mp.roomCode && mp.playerId) {
     db().ref(`rooms/${mp.roomCode}/players/${mp.playerId}/connected`).set(false);
   }
+  document.getElementById('mp-disconnected').classList.remove('visible');
   // Reset mp state
   Object.assign(mp, {
     roomCode: null, playerId: null, playerName: null, isHost: false,
-    nameDestination: null, questions: [], currentQ: 0, mpScore: 0,
+    hostId: null, nameDestination: null, questions: [], currentQ: 0, mpScore: 0,
     mpRafId: null, answered: false, listeners: [], revealTimeout: null
   });
   show('start-screen');

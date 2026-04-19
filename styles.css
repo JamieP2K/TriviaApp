@@ -141,3 +141,10 @@ body { font-family: system-ui,-apple-system,sans-serif; background: var(--bg); c
 .mp-lb-name { flex: 1; font-size: 15px; font-weight: 600; }
 .mp-lb-me { font-size: 11px; color: var(--red); font-weight: 700; margin-left: 6px; }
 .mp-lb-score { font-size: 18px; font-weight: 800; color: var(--red); }
+
+/* MP Host Disconnected Overlay */
+.mp-disconnected-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 200; display: none; align-items: center; justify-content: center; padding: 24px; }
+.mp-disconnected-overlay.visible { display: flex; }
+.mp-disconnected-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px 24px; max-width: 340px; width: 100%; text-align: center; }
+.mp-disconnected-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+.mp-disconnected-msg { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.5; }

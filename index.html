@@ -189,6 +189,15 @@
   <button class="home-btn" style="margin-top:16px" onclick="mpLeave()">⌂ Home</button>
 </div>
 
+<!-- MP Host Disconnected Overlay -->
+<div id="mp-disconnected" class="mp-disconnected-overlay">
+  <div class="mp-disconnected-card">
+    <p class="mp-disconnected-title">Room Closed</p>
+    <p class="mp-disconnected-msg">The host has left the game. The room is no longer available.</p>
+    <button class="start-btn" onclick="mpLeave()">Back to Home</button>
+  </div>
+</div>
+
 <!-- SHEET -->
 <div class="dropdown-overlay" id="overlay" style="display:none" onclick="closeSheet()">
   <div class="dropdown-sheet" onclick="event.stopPropagation()">

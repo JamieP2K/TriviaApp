@@ -312,6 +312,7 @@ async function mpCreateRoom() {
     });
 
     db().ref(`rooms/${code}/players/${mp.playerId}/connected`).onDisconnect().set(false);
+    db().ref(`rooms/${code}`).onDisconnect().remove();
 
     document.getElementById('host-room-code').textContent = code;
     btn.disabled = false; btn.textContent = 'Continue';
@@ -695,7 +696,11 @@ function mpLeave() {
   mp.listeners.forEach(({ ref, handle, event }) => ref.off(event, handle));
   mp.listeners = [];
   if (mp.roomCode && mp.playerId) {
-    db().ref(`rooms/${mp.roomCode}/players/${mp.playerId}/connected`).set(false);
+    if (mp.isHost) {
+      db().ref(`rooms/${mp.roomCode}`).remove();
+    } else {
+      db().ref(`rooms/${mp.roomCode}/players/${mp.playerId}/connected`).set(false);
+    }
   }
   document.getElementById('mp-disconnected').classList.remove('visible');
   // Reset mp state

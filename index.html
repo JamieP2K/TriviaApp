@@ -37,7 +37,7 @@
   </div>
 
   <button class="start-btn" id="start-btn" onclick="startQuiz()">Start Quiz</button>
-  <button class="mp-entry-btn" onclick="showMpMenu()">Multiplayer</button>
+  <button class="mp-entry-btn" onclick="show('mp-menu')">Multiplayer</button>
   <p class="error" id="setup-err" style="display:none"></p>
 </div>
 
@@ -213,6 +213,7 @@
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
   // PASTE YOUR FIREBASE CONFIG HERE

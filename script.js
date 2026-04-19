@@ -114,7 +114,7 @@ function timeOut() {
   history.push({ q: q.q, chosen: null, correct: q.correct, isCorrect: false, timedOut: true });
   document.querySelectorAll('.opt-btn').forEach(b => {
     b.disabled = true;
-    b.classList.add(b.innerHTML === q.correct ? 'reveal-correct' : 'timed-out');
+    b.classList.add(b.dataset.answer === q.correct ? 'reveal-correct' : 'timed-out');
   });
   const nb = document.getElementById('next-btn');
   nb.textContent = current === questions.length-1 ? 'See Results' : 'Next Question →';
@@ -127,12 +127,14 @@ function renderQuestion() {
   document.getElementById('q-num').textContent = `Question ${current+1} of ${total}`;
   document.getElementById('q-score').textContent = score;
   document.getElementById('q-cat').textContent = q.category;
-  document.getElementById('q-text').innerHTML = q.q;
+  document.getElementById('q-text').textContent = q.q;
   const opts = document.getElementById('options');
   opts.innerHTML = '';
   q.options.forEach(opt => {
     const b = document.createElement('button');
-    b.className = 'opt-btn'; b.innerHTML = opt;
+    b.className = 'opt-btn';
+    b.textContent = opt;
+    b.dataset.answer = opt;
     b.onclick = () => selectAnswer(b, opt, q.correct);
     opts.appendChild(b);
   });
@@ -147,7 +149,7 @@ function selectAnswer(btn, chosen, correct) {
   history.push({ q: questions[current].q, chosen, correct, isCorrect, timedOut: false });
   document.querySelectorAll('.opt-btn').forEach(b => {
     b.disabled = true;
-    if (b.innerHTML === correct) b.classList.add(b === btn && isCorrect ? 'correct' : 'reveal-correct');
+    if (b.dataset.answer === correct) b.classList.add(b === btn && isCorrect ? 'correct' : 'reveal-correct');
     if (b === btn && !isCorrect) b.classList.add('wrong');
   });
   if (isCorrect) { btn.classList.remove('reveal-correct'); btn.classList.add('correct'); }
@@ -213,8 +215,18 @@ const mp = {
   revealTimeout: null,
 };
 
-function mpUUID() {
-  return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+function mpEnsureAuth() {
+  return new Promise((resolve, reject) => {
+    const user = firebase.auth().currentUser;
+    if (user) { resolve(user.uid); return; }
+    firebase.auth().signInAnonymously().then(c => resolve(c.user.uid)).catch(reject);
+  });
+}
+
+function mpEscape(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
 }
 
 function mpGenerateCode() {
@@ -230,8 +242,6 @@ function mpInitials(name) {
 
 // ---- Navigation ----
 
-function showMpMenu() { show('mp-menu'); }
-
 function mpGoName(destination) {
   mp.nameDestination = destination;
   document.getElementById('mp-name-input').value = '';
@@ -240,13 +250,23 @@ function mpGoName(destination) {
   setTimeout(() => document.getElementById('mp-name-input').focus(), 100);
 }
 
-function mpConfirmName() {
+async function mpConfirmName() {
   const val = document.getElementById('mp-name-input').value.trim();
   const err = document.getElementById('mp-name-err');
+  const btn = document.getElementById('mp-name-btn');
   if (!val) { err.textContent = 'Please enter a name.'; err.style.display = 'block'; return; }
   err.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    mp.playerId = await mpEnsureAuth();
+  } catch(e) {
+    err.textContent = 'Could not authenticate. Check your connection and try again.';
+    err.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Continue';
+    return;
+  }
+  btn.disabled = false; btn.textContent = 'Continue';
   mp.playerName = val;
-  mp.playerId = mpUUID();
   if (mp.nameDestination === 'host') {
     mpCreateRoom();
   } else {
@@ -313,7 +333,6 @@ function mpListenPlayers() {
   const ref = db().ref(`rooms/${mp.roomCode}/players`);
   const handle = ref.on('value', snap => {
     const players = snap.val() || {};
-    // Host: silently remove disconnected players
     if (mp.isHost) {
       Object.entries(players).forEach(([id, p]) => {
         if (!p.connected && id !== mp.playerId) {
@@ -321,13 +340,10 @@ function mpListenPlayers() {
         }
       });
     }
-    // Update host lobby list
     const hostList = document.getElementById('host-player-list');
     if (hostList) mpRenderPlayerList(hostList, players);
-    // Update lobby list (for joined players)
     const lobbyList = document.getElementById('lobby-player-list');
     if (lobbyList) mpRenderPlayerList(lobbyList, players);
-    // During quiz: update answer reveal tags
     if (document.getElementById('mp-quiz').classList.contains('active')) {
       mpUpdateAnswerTags(players);
       if (mp.isHost) mpCheckAllAnswered(players);
@@ -341,9 +357,20 @@ function mpRenderPlayerList(container, players) {
   Object.entries(players).filter(([,p]) => p.connected !== false).forEach(([id, p]) => {
     const div = document.createElement('div');
     div.className = 'mp-player-item';
-    div.innerHTML = `<div class="mp-player-avatar">${mpInitials(p.name)}</div>
-      <span class="mp-player-name">${p.name}</span>
-      ${id === mp.playerId ? '<span class="mp-player-badge">You</span>' : ''}`;
+    const avatar = document.createElement('div');
+    avatar.className = 'mp-player-avatar';
+    avatar.textContent = mpInitials(p.name);
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'mp-player-name';
+    nameSpan.textContent = p.name;
+    div.appendChild(avatar);
+    div.appendChild(nameSpan);
+    if (id === mp.playerId) {
+      const badge = document.createElement('span');
+      badge.className = 'mp-player-badge';
+      badge.textContent = 'You';
+      div.appendChild(badge);
+    }
     container.appendChild(div);
   });
 }
@@ -380,10 +407,9 @@ async function mpStartGame() {
   err.style.display = 'none';
   btn.disabled = true; btn.textContent = 'Loading…';
 
-  const s = cfg;
-  let url = `https://opentdb.com/api.php?amount=${s.num}&type=multiple`;
-  if (s.cat !== 'any') url += `&category=${s.cat}`;
-  if (s.diff !== 'any') url += `&difficulty=${s.diff}`;
+  let url = `https://opentdb.com/api.php?amount=${cfg.num}&type=multiple`;
+  if (cfg.cat !== 'any') url += `&category=${cfg.cat}`;
+  if (cfg.diff !== 'any') url += `&difficulty=${cfg.diff}`;
 
   try {
     const resp = await fetch(url);
@@ -399,8 +425,7 @@ async function mpStartGame() {
     await db().ref(`rooms/${mp.roomCode}`).update({
       questions: qs,
       currentQuestion: 0,
-      revealing: false,
-      settings: { cat: s.cat, diff: s.diff, num: s.num, timerOn: s.timerOn, timerDur: s.timerDur },
+      settings: { cat: cfg.cat, diff: cfg.diff, num: cfg.num, timerOn: cfg.timerOn, timerDur: cfg.timerDur },
       status: 'playing'
     });
   } catch(e) {
@@ -457,10 +482,7 @@ async function mpJoinRoom() {
 
 function mpStartClientQuiz() {
   mp.mpScore = 0;
-  mp.questions = [];
-  mp.currentQ = 0;
 
-  // Read full room snapshot to get questions and settings, then listen to currentQuestion
   db().ref(`rooms/${mp.roomCode}`).get().then(snap => {
     const room = snap.val();
     mp.questions = room.questions || [];
@@ -499,7 +521,7 @@ function mpRenderMpQuestion(idx) {
   document.getElementById('mp-q-num').textContent = `Question ${idx + 1} of ${total}`;
   document.getElementById('mp-q-score').textContent = mp.mpScore;
   document.getElementById('mp-q-cat').textContent = q.category;
-  document.getElementById('mp-q-text').innerHTML = q.q;
+  document.getElementById('mp-q-text').textContent = q.q;
   document.getElementById('mp-waiting-others').style.display = 'none';
 
   const opts = document.getElementById('mp-options');
@@ -507,7 +529,7 @@ function mpRenderMpQuestion(idx) {
   q.options.forEach(opt => {
     const b = document.createElement('button');
     b.className = 'opt-btn';
-    b.innerHTML = opt;
+    b.textContent = opt;
     b.dataset.answer = opt;
     b.onclick = () => mpSelectAnswer(b, opt, q.correct, idx);
     opts.appendChild(b);
@@ -526,7 +548,6 @@ function mpSelectAnswer(btn, chosen, correct, qIdx) {
   if (isCorrect) mp.mpScore++;
   document.getElementById('mp-q-score').textContent = mp.mpScore;
 
-  // Disable all options and show local reveal
   document.querySelectorAll('#mp-options .opt-btn').forEach(b => {
     b.disabled = true;
     if (b.dataset.answer === correct) b.classList.add(b === btn && isCorrect ? 'correct' : 'reveal-correct');
@@ -534,7 +555,6 @@ function mpSelectAnswer(btn, chosen, correct, qIdx) {
   });
   if (isCorrect) { btn.classList.remove('reveal-correct'); btn.classList.add('correct'); }
 
-  // Write answer to Firebase
   db().ref(`rooms/${mp.roomCode}/players/${mp.playerId}/score`).set(mp.mpScore);
   db().ref(`rooms/${mp.roomCode}/players/${mp.playerId}/answers/${qIdx}`).set(chosen);
 
@@ -634,8 +654,7 @@ function mpShowLeaderboard() {
   db().ref(`rooms/${mp.roomCode}/players`).get().then(snap => {
     const players = snap.val() || {};
     const entries = Object.entries(players)
-      .filter(([,p]) => p.connected !== false || true) // include all who played
-      .map(([id, p]) => ({ id, name: p.name, score: p.score || 0 }))
+      .map(([id, p]) => ({ id, name: p.name, score: Number(p.score) || 0 }))
       .sort((a, b) => b.score - a.score);
 
     // Dense ranking: if tied, same rank; next rank is consecutive
@@ -657,7 +676,7 @@ function mpShowLeaderboard() {
       const isMe = e.id === mp.playerId;
       div.className = `mp-lb-entry ${rankClass}`;
       div.innerHTML = `<div class="mp-lb-rank">${medal}</div>
-        <div class="mp-lb-name">${e.name}${isMe ? '<span class="mp-lb-me">You</span>' : ''}</div>
+        <div class="mp-lb-name">${mpEscape(e.name)}${isMe ? '<span class="mp-lb-me">You</span>' : ''}</div>
         <div class="mp-lb-score">${e.score}</div>`;
       list.appendChild(div);
     });
@@ -681,8 +700,8 @@ function mpLeave() {
   document.getElementById('mp-disconnected').classList.remove('visible');
   // Reset mp state
   Object.assign(mp, {
-    roomCode: null, playerId: null, playerName: null, isHost: false,
-    hostId: null, nameDestination: null, questions: [], currentQ: 0, mpScore: 0,
+    roomCode: null, playerId: null, playerName: null, isHost: false, hostId: null,
+    nameDestination: null, questions: [], currentQ: 0, mpScore: 0,
     mpRafId: null, answered: false, listeners: [], revealTimeout: null
   });
   show('start-screen');
